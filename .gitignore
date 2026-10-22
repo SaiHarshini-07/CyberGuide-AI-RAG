@@ -1,0 +1,8 @@
+.env
+.streamlit/secrets.toml
+.venv/
+__pycache__/
+*.pyc
+faiss_index/
+cyberguide_faiss/
+cyberguide_chroma/
