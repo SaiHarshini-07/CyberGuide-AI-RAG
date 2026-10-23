@@ -179,7 +179,7 @@ else:
                         google_api_key=setting("GOOGLE_API_KEY"),
                         temperature=0.1,
                         max_retries=1,
-                        timeout=60,
+                        timeout=120,
                     )
                     formatted_prompt = PROMPT.invoke({"context": context[:5000], "question": question.strip()})
                     start_time = time.perf_counter()

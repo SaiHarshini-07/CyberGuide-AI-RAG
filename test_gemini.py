@@ -23,7 +23,7 @@ try:
         model=os.getenv("GEMINI_MODEL", "gemini-2.5-flash"),
         google_api_key=api_key,
         temperature=0.1,
-        timeout=60,
+        timeout=120,
         max_retries=0
     )
 
