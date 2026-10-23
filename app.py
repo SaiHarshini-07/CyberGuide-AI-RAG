@@ -178,7 +178,7 @@ else:
                         google_api_key=setting("GOOGLE_API_KEY"),
                         temperature=0.1,
                         max_retries=2,
-                        timeout=60,
+                        timeout=120,
                     )
                     answer = response_text(
                         llm.invoke(PROMPT.invoke({"context": context, "question": question})).content
