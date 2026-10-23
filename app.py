@@ -68,9 +68,9 @@ def doc_key(doc):
     return (doc.metadata.get("source", ""), doc.metadata.get("page", -1), doc.page_content)
 
 
-def retrieve(question, vector_db, keyword_db, chunks, limit=8):
+def retrieve(question, vector_db, keyword_db, chunks, limit=3):
     """Combine FAISS, BM25 and exact-word evidence with reciprocal rank fusion."""
-    semantic = vector_db.similarity_search(question, k=min(12, len(chunks)))
+    semantic = vector_db.similarity_search(question, k=min(5, len(chunks)))
     keyword = keyword_db.invoke(question)
     tokens = set(re.findall(r"[a-z0-9]+", question.lower()))
     stopwords = {"what", "which", "when", "where", "how", "is", "are", "the", "a", "an", "to", "for", "of", "in", "under", "must", "be", "do", "does", "according"}
@@ -173,16 +173,35 @@ else:
                         f"[Source: {e['source']}, page {e['page']}]\n{e['content']}"
                         for e in evidence
                     )
+                    import time
                     llm = ChatGoogleGenerativeAI(
                         model=setting("GEMINI_MODEL", "gemini-3.8-flash"),
                         google_api_key=setting("GOOGLE_API_KEY"),
                         temperature=0.1,
-                        max_retries=2,
-                        timeout=120,
+                        max_retries=1,
+                        timeout=60,
                     )
-                    answer = response_text(
-                        llm.invoke(PROMPT.invoke({"context": context, "question": question})).content
-                    )
+                    formatted_prompt = PROMPT.invoke({"context": context[:5000], "question": question.strip()})
+                    start_time = time.perf_counter()
+                    try:
+                        response = llm.invoke(formatted_prompt)
+                        answer = response_text(response.content)
+                        st.caption(f"Gemini response time: "f"{time.perf_counter() - start_time:.2f} seconds")
+                    except Exception as e:
+                        error_message = str(e)
+                        if "504" in error_message or "DEADLINE_EXCEEDED" in error_message:
+                            st.error(
+            "Gemini API request timed out. "
+            "Please try again after a short interval."
+        )
+                        elif "429" in error_message:
+                            st.error(
+            "Gemini API quota or rate limit exceeded. "
+            "Check your Google AI Studio usage limits."
+        )
+                        else:
+                            st.error(f"Gemini API error: {error_message}")
+                        st.stop()
                 with st.chat_message("assistant"):
                     st.markdown(answer)
                     with st.expander("Sources and retrieved PDF excerpts"):
