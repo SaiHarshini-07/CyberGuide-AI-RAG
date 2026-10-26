@@ -178,7 +178,7 @@ else:
                         model=setting("GEMINI_MODEL", "gemini-3.8-flash"),
                         google_api_key=setting("GOOGLE_API_KEY"),
                         temperature=0.1,
-                        max_retries=1,
+                        max_retries=5,
                         timeout=120,
                     )
                     formatted_prompt = PROMPT.invoke({"context": context[:5000], "question": question.strip()})
