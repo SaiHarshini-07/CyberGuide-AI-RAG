@@ -54,8 +54,49 @@ def llm():
     if not model:
         raise ValueError("Set GEMINI_MODEL to a model available for your Gemini API key.")
     return ChatGoogleGenerativeAI(model=model, google_api_key=setting("GOOGLE_API_KEY"),
-                                 temperature=0.1, max_retries=2, timeout=60)
+                                 temperature=0.1, max_retries=0, timeout=20)
 
+
+def ask_with_fallback(prompt):
+    primary = setting("GEMINI_MODEL")
+    fallback = setting("GEMINI_FALLBACK_MODEL")
+
+    if not primary:
+        raise ValueError("Set GEMINI_MODEL in your .env or Streamlit Secrets.")
+
+    models = [primary]
+
+    if fallback and fallback != primary:
+        models.append(fallback)
+
+    last_error = None
+
+    for model_name in models:
+        try:
+            model = ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=setting("GOOGLE_API_KEY"),
+                temperature=0.1,
+                max_output_tokens=512,
+                timeout=20,
+                max_retries=0,
+            )
+
+            response = model.invoke(prompt)
+            return text_content(response.content)
+
+        except Exception as exc:
+            last_error = exc
+            message = str(exc).lower()
+
+            if not any(code in message for code in [
+                "503", "504", "unavailable", "deadline_exceeded"
+            ]):
+                raise
+
+    raise RuntimeError(
+        "Configured Gemini models are unavailable. Please try again later."
+    ) from last_error
 
 def build_index(files):
     pages = []
@@ -82,9 +123,9 @@ def key(doc):
     return (doc.metadata.get("source", ""), doc.metadata.get("page", -1), doc.page_content)
 
 
-def retrieve(question, index, limit=8):
+def retrieve(question, index, limit=4):
     chunks = index["chunks"]
-    semantic = index["vector"].similarity_search(question, k=min(12, len(chunks)))
+    semantic = index["vector"].similarity_search(question, k=min(5, len(chunks)))
     keyword = index["keyword"].invoke(question)
     stop = {"what", "which", "when", "where", "how", "is", "are", "the", "a", "an", "to", "for", "of", "in", "under", "must", "be", "do", "does", "according", "and"}
     terms = set(re.findall(r"[a-z0-9]+", question.lower())) - stop
@@ -217,7 +258,12 @@ elif page == "💬 AI Document Assistant":
                     with st.spinner("Searching documents and generating answer..."):
                         docs = retrieve(question.strip(), st.session_state.index)
                         ev = evidence(docs)
-                        answer = text_content(llm().invoke(QA_PROMPT.invoke({"context": context_for(ev), "question": question})).content)
+                        answer = ask_with_fallback(
+    QA_PROMPT.invoke({
+        "context": context_for(ev),
+        "question": question
+    })
+)
                     st.markdown(answer)
                     with st.expander("Retrieved source excerpts"):
                         for e in ev:
@@ -247,7 +293,11 @@ elif page == "📑 Document Analyzer":
                     else:
                         docs = [d for d in idx["chunks"] if d.metadata.get("source") == selected][:12]
                     ev = evidence(docs)
-                    summary = text_content(llm().invoke(SUMMARY_PROMPT.invoke({"context": context_for(ev)})).content)
+                    summary = ask_with_fallback(
+    SUMMARY_PROMPT.invoke({
+        "context": context_for(ev)
+    })
+)
                     st.session_state.summary = {"text": summary, "document": selected, "evidence": ev}
             except Exception as exc:
                 st.error(f"Summary failed: {exc}")
